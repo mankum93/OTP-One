@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">OTP One</string>
+
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+
+
+    <string name="contact_name">Name </string>
+    <string name="contact_phone_no">Phone No </string>
+    <string name="email_id">Email ID </string>
+    <string name="address">Address </string>
+    <string name="send_message_button_text">Send Message</string>
+
+
+    <string name="msg_content">Message Content</string>
+    <string name="send_button_text">Send</string>
+
+    <string name="time_msg_sent">00:00</string>
+
+</resources>
