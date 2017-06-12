@@ -4,6 +4,7 @@ import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.support.v4.util.Pair;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -15,6 +16,9 @@ import android.widget.Toast;
 import com.otpone.otpone.database.ContactsDbHelper;
 import com.otpone.otpone.model.Contact;
 import com.otpone.otpone.model.OTPMessage;
+import com.otpone.otpone.model.Repository;
+import com.otpone.otpone.util.MapUtil;
+import com.otpone.otpone.util.mocks.MockMessageSendingTask;
 import com.plivo.helper.api.client.RestAPI;
 import com.plivo.helper.api.response.message.MessageResponse;
 import com.plivo.helper.exception.PlivoException;
@@ -27,6 +31,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -45,13 +50,15 @@ public class SendOTPActivity extends AppCompatActivity {
 
     private static final String TAG = SendOTPActivity.class.getSimpleName();
 
+    public static final String EXTRA_CONTACTS_DATA = "EXTRA_CONTACTS_DATA";
     public static final String EXTRA_OTP_MESSAGE = "EXTRA_OTP_MESSAGE";
     private TextView msgContent;
     private Button sendButton;
 
     private MessageSendingHandlerThread handlerThread;
-    private ContactsDbHelper helper;
-    private SQLiteDatabase db;
+    private Map<OTPMessage, Contact> messagesAndContacts;
+
+    private Repository repo;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,10 +70,11 @@ public class SendOTPActivity extends AppCompatActivity {
 
         // Retrieve the OTP Message extra
         final OTPMessage otpMessage = getIntent().getParcelableExtra(EXTRA_OTP_MESSAGE);
+        // Retrieve the Contact extra.
+        final Contact contact = getIntent().getParcelableExtra(EXTRA_CONTACTS_DATA);
 
-        // Initialize Db instance
-        helper = new ContactsDbHelper(getApplicationContext());
-        db = helper.getWritableDatabase();
+        // Retrieve the Repository.
+        repo = Repository.getRepository();
 
         // Bind the TextView with the message to be sent
         msgContent.setText(otpMessage.getMsgBody());
@@ -84,7 +92,8 @@ public class SendOTPActivity extends AppCompatActivity {
                 // Disable the button while the message is being sent.
                 sendButton.setEnabled(false);
 
-                MessageSendingTask task = new MessageSendingTask(otpMessage);
+                //MessageSendingTask task = new MessageSendingTask(otpMessage);
+                MockMessageSendingTask task = new MockMessageSendingTask(otpMessage);
                 task.setMessageSendResponseListener(new MessageSendingListener<MessageResponse>() {
 
                     @Override
@@ -93,9 +102,9 @@ public class SendOTPActivity extends AppCompatActivity {
                         otpMessage.setMessageTimestamp(new Timestamp(System.currentTimeMillis()));
 
                         // Stash this message in the Db with the list of sent of message
-                        ContactsDbHelper.insertMessageToDatabase(db, otpMessage);
+                        ContactsDbHelper.insertMessageToDatabase2(repo.db, otpMessage);
 
-                        // Fill the cache with this message with other sent messages.
+                        // Fill the Event Bus cache with this message with other sent messages.
                         // And then fire the sent message event through the Event Bus.
                         EventBus eventBus = EventBus.getDefault();
                         SentMessageEvent existingEvent = eventBus.getStickyEvent(SentMessageEvent.class);
@@ -103,8 +112,10 @@ public class SendOTPActivity extends AppCompatActivity {
                             // Create a new event
                             existingEvent = new SentMessageEvent();
                         }
+
                         // Fire it.
-                        existingEvent.addNewSentMessage(otpMessage);
+                        existingEvent.addNewSentMessage(otpMessage, contact);
+                        Log.d(TAG, "Firing SentMessageEvent...");
                         eventBus.postSticky(existingEvent);
 
                         // Update the UI
@@ -135,12 +146,17 @@ public class SendOTPActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+
+        messagesAndContacts = null;
+        repo = null;
+    }
+
+    @Override
     protected void onStop() {
         handlerThread.quit();
         handlerThread = null;
-        if(db.isOpen()){
-            db.close();
-        }
 
         super.onStop();
     }
@@ -152,11 +168,6 @@ public class SendOTPActivity extends AppCompatActivity {
         handlerThread = new MessageSendingHandlerThread("Message Send Service");
         handlerThread.start();
         handlerThread.prepareHandler();
-
-        // Open the Db
-        if(!db.isOpen()){
-            db = helper.getWritableDatabase();
-        }
     }
 
     private void showMessageNotSentToast(Context context){
@@ -288,22 +299,22 @@ public class SendOTPActivity extends AppCompatActivity {
      */
     public static class SentMessageEvent {
 
-        private List<OTPMessage> sentMessages = new LinkedList<>();
+        private Map<OTPMessage, Contact> sentMessagesAndContacts = new LinkedHashMap<>();
         private Map<UUID, List<Integer>> messagesConsumptionStatuses = new LinkedHashMap<>();
         private Map<UUID, Integer> currentConsumptionStatus;
 
-        public void addNewSentMessages(OTPMessage...messages){
-            List<OTPMessage> messagesToBeAdded = Arrays.asList(messages);
-            sentMessages.addAll(messagesToBeAdded);
+        public void addNewSentMessages(Map<OTPMessage, Contact> messagesToBeAdded){
+            sentMessagesAndContacts.putAll(messagesToBeAdded);
             updateMessageConsumptionTrackingCounters(messagesToBeAdded);
         }
 
-        public void addNewSentMessages(List<OTPMessage> messages){
-            sentMessages.addAll(messages);
-            updateMessageConsumptionTrackingCounters(messages);
+        public void addNewSentMessages(List<OTPMessage> messages, Contact contact){
+            Map<OTPMessage, Contact> messagesToBeAdded = MapUtil.getMap(new LinkedHashMap<>(), (List)messages, contact);
+            sentMessagesAndContacts.putAll(messagesToBeAdded);
+            updateMessageConsumptionTrackingCounters(messagesToBeAdded);
         }
 
-        private void updateMessageConsumptionTrackingCounters(List<OTPMessage> messages){
+        private void updateMessageConsumptionTrackingCounters(Map<OTPMessage, Contact> messages){
             int i;
             Set<UUID> currentKeys = messagesConsumptionStatuses.keySet();
 
@@ -345,9 +356,9 @@ public class SendOTPActivity extends AppCompatActivity {
             }
         }
 
-        public void addNewSentMessage(OTPMessage messages){
+        public void addNewSentMessage(OTPMessage message, Contact associatedContact){
             synchronized (this){
-                sentMessages.add(messages);
+                sentMessagesAndContacts.put(message, associatedContact);
             }
             updateMessageConsumptionTrackingCounter();
         }
@@ -359,10 +370,10 @@ public class SendOTPActivity extends AppCompatActivity {
          *
          * @return An unmodifiable snapshot(list) of the messages that have been sent.
          */
-        public final List<OTPMessage> getSentMessages() {
-            List<OTPMessage> messageListToBeSent;
+        public final Map<OTPMessage, Contact> getSentMessagesAndContacts() {
+            Map<OTPMessage, Contact> messageListToBeSent;
             synchronized (this){
-                messageListToBeSent = Collections.unmodifiableList(sentMessages);
+                messageListToBeSent = Collections.unmodifiableMap(sentMessagesAndContacts);
             }
             return messageListToBeSent;
         }
@@ -374,8 +385,8 @@ public class SendOTPActivity extends AppCompatActivity {
          * of several individual sent message events. It depends on when this method is
          * called.
          */
-        public List<OTPMessage> getSentMessages(UUID token){
-            List<OTPMessage> messagesToBeConsumed;
+        public Map<OTPMessage, Contact> getSentMessages(UUID token){
+            Map<OTPMessage, Contact> messagesToBeConsumed;
             if(!messagesConsumptionStatuses.containsKey(token)){
                 // It is possible that before entering this method, we had 3 messages sent
                 // and at this point 3 messages are supposed to be consumed as per the event
@@ -393,35 +404,43 @@ public class SendOTPActivity extends AppCompatActivity {
                 // If these events are all thrown then 98 of them shall return an empty list. Woah!
                 // This can only be controlled by the channeler of these events by filtering them.
                 synchronized (this){
-                    messagesConsumptionStatuses.put(token, Collections.nCopies(sentMessages.size(), 0));
+                    messagesConsumptionStatuses.put(token, new ArrayList<Integer>(Collections.nCopies(sentMessagesAndContacts.size(), 0)));
                     // Also update the current consumption status
                     currentConsumptionStatus = new LinkedHashMap<>();
                     currentConsumptionStatus.put(token, 0);
                     // Initially, return whatever has been sent
-                    List<OTPMessage> messageListToBeSent;
-                    messageListToBeSent = Collections.unmodifiableList(sentMessages);
+                    Map<OTPMessage, Contact> messageListToBeSent;
+                    messageListToBeSent = Collections.unmodifiableMap(sentMessagesAndContacts);
                     return messageListToBeSent;
                 }
             }
             else{
-                messagesToBeConsumed = new ArrayList<>();
+                messagesToBeConsumed = new LinkedHashMap<>();
                 Collection<Integer> consumptionCounters = messagesConsumptionStatuses.get(token);
                 // Check the current consumption status and update this status
                 // to a newer one. Return all the messages with the newer consumption
                 // status
                 int consumptionIndex = currentConsumptionStatus.get(token);
                 // Search for all messages we have for consumptionIndex + 1
+
+                Set<Map.Entry<OTPMessage, Contact>> sentMessagesAndContactsSet = sentMessagesAndContacts.entrySet();
+                Iterator<Map.Entry<OTPMessage, Contact>> iter = sentMessagesAndContactsSet.iterator();
                 int i =0;
                 for(Integer counter : consumptionCounters){
                     if(counter > consumptionIndex + 1){
                         break;
                     }
+                    // Get the message at this index
+                    Map.Entry<OTPMessage, Contact> entry = iter.next();
+
                     if(counter == consumptionIndex + 1){
-                        // Get the message at this index
-                        OTPMessage message = sentMessages.get(i);
+
+                        OTPMessage message = entry.getKey();
+                        Contact c = entry.getValue();
+
                         i++;
                         // Add this message to a list of sent messages
-                        messagesToBeConsumed.add(message);
+                        messagesToBeConsumed.put(message, c);
                     }
                 }
                 // Update the current consumption index

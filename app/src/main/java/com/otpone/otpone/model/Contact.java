@@ -90,7 +90,7 @@ public class Contact implements Parcelable {
         }
     }
 
-    public Name getContactName() {
+    public Name getName() {
         return contactName;
     }
 

@@ -1,27 +1,21 @@
 package com.otpone.otpone;
 
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.support.v7.widget.DividerItemDecoration;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
-import android.test.mock.MockApplication;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import com.otpone.otpone.database.ContactsDbHelper;
 import com.otpone.otpone.model.Contact;
 import com.otpone.otpone.model.OTPMessage;
+import com.otpone.otpone.model.Repository;
 import com.otpone.otpone.util.DateTimeUtils;
 
-import org.greenrobot.eventbus.EventBus;
-
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -32,44 +26,53 @@ import java.util.Map;
 
 public class MessagesRecordFragment extends Fragment {
 
-    private RecyclerView messagesRecord;
+    private RecyclerView messagesRecordRecyclerView;
     private MessagesRecordListAdapter adapter;
 
-    private boolean initialized = false;
-    private Map<Contact, List<OTPMessage>> contactsAndMessages;
+    private boolean noChange = false;
+    private Map<OTPMessage, Contact> messagesAndContacts;
+    private static final String EXTRA_DISPLAY_STATUS = "EXTRA_DISPLAY_STATUS";
+
+    private Repository repo;
+
+    private static final String TAG = "MessagesRecordFragment";
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // Retrieve all messages from the Database.
-        // This is what has been retrieved at the Application startup.
-        // From this point ownwards(for this session), we shall keep track of
-        // these records and keep updating them from cache
-        contactsAndMessages = ((OTPOneApplication) getActivity().getApplication()).getContactsAndMessages();
-
-        initialized = true;
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
+
+        /*if(savedInstanceState != null){
+            // In this case, we just have to display the data that had been shown in the
+            // previous orientation. So, no need to load it afresh.
+            noChange = savedInstanceState.getBoolean(EXTRA_DISPLAY_STATUS);
+        }*/
+
+        repo = Repository.getRepository();
+        messagesAndContacts = repo.getMessagesAndContacts();
+
         // Inflate the layout for this fragment
         View root = inflater.inflate(R.layout.fragment_messages_record, container, false);
 
         // Retrieve the RecyclerView
-        messagesRecord = (RecyclerView) root.findViewById(R.id.contact_list);
+        messagesRecordRecyclerView = (RecyclerView) root.findViewById(R.id.contact_list);
 
-        // Setup the Recycler View
-        adapter = new MessagesRecordListAdapter(contactsAndMessages);
-        messagesRecord.setAdapter(adapter);
+        // Setup the Recycler View Adapter
+        adapter = new MessagesRecordListAdapter(messagesAndContacts);
+        messagesRecordRecyclerView.setAdapter(adapter);
+
+        // Layout Manager
         LinearLayoutManager layoutManager = new LinearLayoutManager(getContext());
-        messagesRecord.setLayoutManager(layoutManager);
+        messagesRecordRecyclerView.setLayoutManager(layoutManager);
 
         // Setup a RecyclerView divider
-        DividerItemDecoration dividerItemDecoration = new DividerItemDecoration(messagesRecord.getContext(),
+        DividerItemDecoration dividerItemDecoration = new DividerItemDecoration(messagesRecordRecyclerView.getContext(),
                 layoutManager.getOrientation());
-        messagesRecord.addItemDecoration(dividerItemDecoration);
+        messagesRecordRecyclerView.addItemDecoration(dividerItemDecoration);
 
         return root;
     }
@@ -78,35 +81,30 @@ public class MessagesRecordFragment extends Fragment {
     public void onStart() {
         super.onStart();
 
-        // Register with the EventBus for receiving sent messages
-        EventBus.getDefault().register(this);
-
-        if(!initialized){
-            // Retrieve fresh data.
-            // Retrieve all messages from the Database.
-            ContactsDbHelper helper = new ContactsDbHelper(getActivity().getApplicationContext());
-            SQLiteDatabase db = helper.getWritableDatabase();
-            Map<Contact, List<OTPMessage>> contactsAndMessages = ContactsDbHelper.getAllContactsAndMessagesFromDatabase(db);
-
-            // Refresh the data.
-            adapter.setContactsAndMessages(contactsAndMessages);
+        // Refreshing of data has to be done in case any new messages were sent.
+        if(repo == null){
+            // Repo will only be null because of reference release.
+            repo = Repository.getRepository();
+            messagesAndContacts = repo.getMessagesAndContacts();
+            adapter.refreshMessagesAndContacts(messagesAndContacts);
+            adapter.notifyDataSetChanged();
         }
-        initialized = false;
     }
 
     @Override
     public void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        // Save the messages records we have.
-        outState.
 
+        //outState.putBoolean(EXTRA_DISPLAY_STATUS, noChange);
+
+        super.onSaveInstanceState(outState);
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        // Unregister with the EventBus
-        EventBus.getDefault().register(this);
+        // Release the references.
+        repo = null;
+        messagesAndContacts = null;
     }
 
     /**
@@ -114,17 +112,36 @@ public class MessagesRecordFragment extends Fragment {
      */
     private static class MessagesRecordListAdapter extends RecyclerView.Adapter<MessageViewHolder> implements RecyclerViewClickListener{
 
-        private Map<OTPMessage, Contact> messagesAncContacts;
-
-        private Map<Contact, List<OTPMessage>> contactsAndMessages;
+        private Map<OTPMessage, Contact> messagesAndContacts;
         private List<OTPMessage> aggregateList;
 
-        public MessagesRecordListAdapter(Map<Contact, List<OTPMessage>> contactsAndMessages) {
-            this.contactsAndMessages = contactsAndMessages;
-            // Initialize the list of aggregate messages
-            mapMessagesWithContacts();
-            createAggregateListofMessages();
-            sortAggregateListOfMessages();
+        public MessagesRecordListAdapter(Map<OTPMessage, Contact> messagesAndContacts) {
+            this.messagesAndContacts = messagesAndContacts;
+
+            if(aggregateList == null){
+                aggregateList = new LinkedList<>();
+            }
+            else{
+                aggregateList.clear();
+            }
+            if(messagesAndContacts != null){
+                aggregateList.addAll(messagesAndContacts.keySet());
+            }
+        }
+
+        public void refreshMessagesAndContacts(Map<OTPMessage, Contact> messagesAndContacts) {
+            this.messagesAndContacts = messagesAndContacts;
+
+            // Setting this means refreshing the list as well.
+            if(aggregateList == null){
+                aggregateList = new LinkedList<>();
+            }
+            else{
+                aggregateList.clear();
+            }
+            if(messagesAndContacts != null){
+                aggregateList.addAll(messagesAndContacts.keySet());
+            }
         }
 
         @Override
@@ -145,7 +162,7 @@ public class MessagesRecordFragment extends Fragment {
             OTPMessage messageToBeBound = aggregateList.get(position);
 
             // Bind the Name
-            holder.getContactName().setText(messagesAncContacts.get(messageToBeBound).getContactName().toString());
+            holder.getContactName().setText(messagesAndContacts.get(messageToBeBound).getName().toString());
             // Bind the Time Stamp
             holder.getTimeMessageSent().setText(DateTimeUtils.timeStampToHH_MMFormat(messageToBeBound.getMessageTimestamp()));
             // Bind the Message content.
@@ -163,60 +180,8 @@ public class MessagesRecordFragment extends Fragment {
             // clicking any list item.
 
             //Intent i = new Intent(v.getContext(), ContactInfoActivity.class);
-            //i.putExtra(EXTRA_CONTACTS_DATA, messagesRecord.get(position));
+            //i.putExtra(EXTRA_CONTACTS_DATA, messagesRecordRecyclerView.get(position));
             //v.getContext().startActivity(i);
-        }
-
-        public void setContactsAndMessages(Map<Contact, List<OTPMessage>> contactsAndMessages) {
-            this.contactsAndMessages = contactsAndMessages;
-            refreshData();
-        }
-
-        private void refreshData(){
-            mapMessagesWithContacts();
-            createAggregateListofMessages();
-            sortAggregateListOfMessages();
-            notifyDataSetChanged();
-        }
-
-        private void mapMessagesWithContacts(){
-            if(messagesAncContacts == null){
-                messagesAncContacts = new LinkedHashMap<>();
-            }
-            else{
-                messagesAncContacts.clear();
-            }
-            for(Map.Entry<Contact, List<OTPMessage>> entry : contactsAndMessages.entrySet()){
-                Contact contact = entry.getKey();
-                List<OTPMessage> messages = entry.getValue();
-
-                if(messages == null || messages.isEmpty()){
-                    continue;
-                }
-                for(OTPMessage msg : messages){
-                    messagesAncContacts.put(msg, contact);
-                }
-
-            }
-        }
-
-        private void createAggregateListofMessages(){
-            if(aggregateList == null){
-                aggregateList = new LinkedList<>();
-            }
-            else{
-                aggregateList.clear();
-            }
-            for(List<OTPMessage> list : contactsAndMessages.values()){
-                if(list == null || list.isEmpty()){
-                    continue;
-                }
-                aggregateList.addAll(list);
-            }
-        }
-
-        private void sortAggregateListOfMessages(){
-            Collections.sort(aggregateList);
         }
     }
 

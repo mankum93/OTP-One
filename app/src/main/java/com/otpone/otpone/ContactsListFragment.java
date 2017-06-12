@@ -13,8 +13,12 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import com.otpone.otpone.model.Contact;
+import com.otpone.otpone.model.OTPMessage;
+import com.otpone.otpone.model.Repository;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.otpone.otpone.ContactInfoActivity.EXTRA_CONTACTS_DATA;
 
@@ -27,6 +31,7 @@ public class ContactsListFragment extends Fragment {
 
 
     private RecyclerView contactsListView;
+    private Repository repo;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -37,8 +42,17 @@ public class ContactsListFragment extends Fragment {
         // Retrieve the RecyclerView
         contactsListView = (RecyclerView) root.findViewById(R.id.contact_list);
 
+        // Initialize the Repository
+        repo = Repository.getRepository();
+
         // Retrieve the data from the Application
-        List<Contact> contactsData = ((OTPOneApplication) getActivity().getApplication()).getDummyContactsData();
+        Map<Contact, List<OTPMessage>> contactOTPMessageMap = repo.getContactsAndMessages();
+
+        List<Contact> contactsData = null;
+        if(contactOTPMessageMap != null){
+            contactsData = new ArrayList<>(contactOTPMessageMap.keySet());
+        }
+
         // Setup the Recycler View
         contactsListView.setAdapter(new ContactsListAdapter(contactsData));
         LinearLayoutManager layoutManager = new LinearLayoutManager(getContext());
@@ -81,7 +95,7 @@ public class ContactsListFragment extends Fragment {
 
             final Contact contactToBeBound = contactList.get(position);
             // Bind the Name
-            holder.getContactName().setText(contactToBeBound.getContactName().toString());
+            holder.getContactName().setText(contactToBeBound.getName().toString());
             // Bind the Phone No.
             holder.getContactPhoneNo().setText(Contact.toFormattedPhoneNo(contactToBeBound.getPhoneNo()));
         }

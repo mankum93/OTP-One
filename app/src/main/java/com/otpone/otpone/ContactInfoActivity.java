@@ -52,7 +52,7 @@ public class ContactInfoActivity extends AppCompatActivity {
 
         sendButton = (Button) findViewById(R.id.send_msg_button);
 
-        Contact contact = getIntent().getParcelableExtra(EXTRA_CONTACTS_DATA);
+        final Contact contact = getIntent().getParcelableExtra(EXTRA_CONTACTS_DATA);
 
         if(contact == null){
             Log.e(TAG, "There wan't any contact data sent to be displayed." +
@@ -63,7 +63,7 @@ public class ContactInfoActivity extends AppCompatActivity {
         }
 
         // Bind data to views
-        contactName.setText(contact.getContactName().toString());
+        contactName.setText(contact.getName().toString());
         contactPhoneNo.setText(Contact.toFormattedPhoneNo(contact.getPhoneNo()));
         emailId.setText(contact.getEmailId());
         address.setText(contact.getAddress().toString());
@@ -90,6 +90,7 @@ public class ContactInfoActivity extends AppCompatActivity {
                 if(otpMessage != null){
                     Intent i = new Intent(getApplicationContext(), SendOTPActivity.class);
                     i.putExtra(EXTRA_OTP_MESSAGE, otpMessage);
+                    i.putExtra(SendOTPActivity.EXTRA_CONTACTS_DATA, contact);
                     startActivity(i);
                 }
                 else{

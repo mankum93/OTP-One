@@ -2,6 +2,7 @@ package com.otpone.otpone.util;
 
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -33,5 +34,17 @@ public class MapUtil {
             result.put( entry.getKey(), entry.getValue() );
         }
         return result;
+    }
+
+    public static <K, V> Map<K, V> getMap(Map<K, V> stashInMe, List<K> keys, V value){
+
+        if(stashInMe == null){
+            stashInMe = new HashMap<>();
+        }
+        for(K key : keys){
+            stashInMe.put(key, value);
+        }
+
+        return stashInMe;
     }
 }

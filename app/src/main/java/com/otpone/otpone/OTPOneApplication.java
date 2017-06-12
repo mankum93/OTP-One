@@ -1,12 +1,10 @@
 package com.otpone.otpone;
 
-import android.app.IntentService;
 import android.content.Context;
-import android.content.Intent;
 import android.content.res.AssetManager;
 import android.database.sqlite.SQLiteDatabase;
-import android.support.annotation.Nullable;
 import android.support.multidex.MultiDexApplication;
+import android.support.v4.util.Pair;
 import android.util.Log;
 
 import com.facebook.stetho.Stetho;
@@ -15,7 +13,7 @@ import com.google.gson.stream.JsonReader;
 import com.otpone.otpone.database.ContactsDbHelper;
 import com.otpone.otpone.model.Contact;
 import com.otpone.otpone.model.OTPMessage;
-import com.plivo.helper.api.client.RestAPI;
+import com.otpone.otpone.model.Repository;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -23,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -52,18 +51,12 @@ public class OTPOneApplication extends MultiDexApplication {
     public static final String REGISTERED_SENDER_PHONE_NO = "9717552439";
     // A Plivo SandBox verified number
     public static final String REGISTERED_RECEIVER_PHONE_NO = "9818539195";
-    //----------------------------------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------------------------
 
     // Initialize Plivo
     //public static final RestAPI PLIVO_API = new RestAPI(PLIVO_AUTH_ID, PLIVO_AUTH_TOKEN, "v1");
 
-    /**
-     * For testing purposes, we have a store of dummy data.
-     */
-    private List<Contact> dummyContactsData;
-    private Map<Contact, List<OTPMessage>> contactsAndMessages;
-    private SQLiteDatabase db;
-    private ContactsDbHelper helper;
+    private Repository repo;
 
     @Override
     public void onCreate() {
@@ -72,31 +65,19 @@ public class OTPOneApplication extends MultiDexApplication {
         // Initialize Stetho
         Stetho.initializeWithDefaults(this);
 
-        // Initialize the Db hook
-        helper = new ContactsDbHelper(this);
-        db = helper.getWritableDatabase();
+        // Fetch the repo. and init() it.
+        repo = Repository.getRepository(this);
+        repo.init();
 
-        if(isExistingDbOnThisDevice(this)){
-            // Try populating the data from the database instead
-            contactsAndMessages = ContactsDbHelper.getAllContactsAndMessagesFromDatabase(db);
-            if(contactsAndMessages != null){
-                dummyContactsData = new LinkedList<>(contactsAndMessages.keySet());
-                Log.d(TAG, "Dummy Contacts data loaded successfully from Db.");
-
-                db.close();
-            }
-            else{
-                // Db exists but Tables are not present
-                populateContactsFromFile();
-            }
-        }
-        else{
-            // Fresh start on this device
+        // Check the Repository for existing data.
+        if(repo.getContactsAndMessages() == null){
             populateContactsFromFile();
         }
     }
 
     private void populateContactsFromFile(){
+
+        final List<Contact> dummyContactsData;
         Gson gson = new Gson();
 
         // Access the file using the Asset Manager
@@ -122,43 +103,34 @@ public class OTPOneApplication extends MultiDexApplication {
         }
         Log.d(TAG, "Dummy Contacts data loaded successfully from file");
 
+        // Prepare for these contacts to be stashed directly in the Repository.
+        Map<Contact, List<OTPMessage>> contactAndMessages = new LinkedHashMap<>();
+
+        // Initialize the Repository with initially loaded dummy data
+        for(Contact contact : dummyContactsData){
+            contactAndMessages.put(contact, null);
+        }
+        repo.setContactsAndMessages(contactAndMessages);
+
         // Start a background thread for writing these records to Database
         new Thread(new Runnable() {
             @Override
             public void run() {
+
                 // Insert this data to Db
                 // Create the required tables in the Db first
-                ContactsDbHelper.createContactTables(db);
-                for(Contact c : dummyContactsData){
-                    ContactsDbHelper.createMesssageTable(db, c);
-                    ContactsDbHelper.insertContactToDatabase(db, c);
-                }
+
+                // Contacts Table
+                ContactsDbHelper.createContactTables(repo.db);
+                // Messages Table
+                ContactsDbHelper.createMessageRecordsTable(repo.db);
+
+                // Insert the contacts into the table.
+                ContactsDbHelper.insertContactsToDatabase(repo.db, dummyContactsData);
+
                 Log.d(TAG, "Dummy Contacts data inserted successfully to Db.");
 
-                // Close the Db.
-                db.close();
             }
         }).start();
-    }
-
-    public static boolean isExistingDbOnThisDevice(Context context) {
-        File dbPath = ContactsDbHelper.isExistingDatabase(context, DATABASE_NAME);
-        if(dbPath == null){
-            return false;
-        }
-        else{
-            return true;
-        }
-    }
-
-    /**
-     * @return The dummy contacts data.
-     */
-    public List<Contact> getDummyContactsData(){
-        return dummyContactsData;
-    }
-
-    public Map<Contact, List<OTPMessage>> getContactsAndMessages() {
-        return contactsAndMessages;
     }
 }

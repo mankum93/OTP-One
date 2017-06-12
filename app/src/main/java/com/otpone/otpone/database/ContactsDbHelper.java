@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteDatabaseLockedException;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.support.v4.util.Pair;
 import android.util.Log;
 
 import com.otpone.otpone.model.Contact;
@@ -15,6 +16,7 @@ import com.otpone.otpone.model.OTPMessage;
 import java.io.File;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -47,28 +49,20 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
 
     public static void createContactTables(SQLiteDatabase db){
 
-        db.execSQL("create table " + ContactTable.NAME + "(" +
-                ContactTable.cols.CONTACT_PHONE_NO + "," +
+        db.execSQL("CREATE TABLE " + ContactTable.NAME + "(" +
+                ContactTable.cols.CONTACT_PHONE_NO + " NOT NULL " + " PRIMARY KEY " + "," +
+                ContactTable.cols.FIRST_NAME + " NOT NULL " + "," +
+                ContactTable.cols.MIDDLE_NAME + "," +
+                ContactTable.cols.LAST_NAME + "," +
                 ContactTable.cols.CONTACT_EMAIL_ID + ")"
         );
         Log.d(TAG, "Contact table creation complete");
 
         //-------------------------------------------------------------------
 
-        // Now the table creation for Name.
-        db.execSQL("create table " + ContactTable.ContactNameTable.NAME + "(" +
-                ContactTable.cols.CONTACT_PHONE_NO + "," +
-                ContactTable.ContactNameTable.cols.FIRST_NAME + "," +
-                ContactTable.ContactNameTable.cols.MIDDLE_NAME + "," +
-                ContactTable.ContactNameTable.cols.LAST_NAME + ")"
-        );
-        Log.d(TAG, "Contact Name table creation complete");
-
-        //-------------------------------------------------------------------
-
         // Now the table creation for Address.
         db.execSQL("create table " + ContactTable.ContactAddressTable.NAME + "(" +
-                ContactTable.cols.CONTACT_PHONE_NO + "," +
+                ContactTable.cols.CONTACT_PHONE_NO + " NOT NULL " + " PRIMARY KEY " + "," +
                 ContactTable.ContactAddressTable.cols.FIRST_LINE + "," +
                 ContactTable.ContactAddressTable.cols.SECOND_LINE + "," +
                 ContactTable.ContactAddressTable.cols.CITY + "," +
@@ -77,27 +71,15 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
         Log.d(TAG, "Contact Address table creation complete");
     }
 
-    public static void createMesssageTable(SQLiteDatabase db, Contact contact){
-        if(!isExistingTable(db, MessagesRecordTable.NAME_PREFIX + contact.getPhoneNo())){
-            db.execSQL("create table " + MessagesRecordTable.NAME_PREFIX + contact.getPhoneNo() + "(" +
-                    ContactTable.cols.CONTACT_PHONE_NO + "," +
-                    MessagesRecordTable.cols.MESSAGE_FROM + "," +
-                    MessagesRecordTable.cols.MESSAGE_BODY + "," +
-                    MessagesRecordTable.cols.MESSAGE_TIMESTAMP + ")"
+    public static void createMessageRecordsTable(SQLiteDatabase db){
+        if(!isExistingTable(db, MessagesRecordsTable.NAME)){
+            db.execSQL("create table " + MessagesRecordsTable.NAME + "(" +
+                    MessagesRecordsTable.cols.MESSAGE_FROM + " NOT NULL " + "," +
+                    MessagesRecordsTable.cols.MESSAGE_TO + " NOT NULL " + "," +
+                    MessagesRecordsTable.cols.MESSAGE_BODY + "," +
+                    MessagesRecordsTable.cols.MESSAGE_TIMESTAMP + " NOT NULL " + ")"
             );
-            Log.d(TAG, "Contact Message Record table creation complete.");
-        }
-    }
-
-    public static void createMesssageTable(SQLiteDatabase db, String phoneNo){
-        if(!isExistingTable(db, MessagesRecordTable.NAME_PREFIX + phoneNo)){
-            db.execSQL("create table " + MessagesRecordTable.NAME_PREFIX + phoneNo + "(" +
-                    ContactTable.cols.CONTACT_PHONE_NO + "," +
-                    MessagesRecordTable.cols.MESSAGE_FROM + "," +
-                    MessagesRecordTable.cols.MESSAGE_BODY + "," +
-                    MessagesRecordTable.cols.MESSAGE_TIMESTAMP + ")"
-            );
-            Log.d(TAG, "Contact Message Record table creation complete.");
+            Log.d(TAG, "Contacts Messages Records table creation complete.");
         }
     }
 
@@ -108,18 +90,13 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
         ContentValues contentValues = new ContentValues();
 
         contentValues.put(ContactTable.cols.CONTACT_PHONE_NO, contact.getPhoneNo());
+
+        Contact.Name name = contact.getName();
+        contentValues.put(ContactTable.cols.FIRST_NAME, name.getFirstName());
+        contentValues.put(ContactTable.cols.MIDDLE_NAME, name.getMiddleName());
+        contentValues.put(ContactTable.cols.LAST_NAME, name.getLastName());
+
         contentValues.put(ContactTable.cols.CONTACT_EMAIL_ID, contact.getEmailId());
-
-        return contentValues;
-    }
-
-    public static ContentValues getContentValues(Contact.Name name, String phoneNo){
-        ContentValues contentValues = new ContentValues();
-
-        contentValues.put(ContactTable.cols.CONTACT_PHONE_NO, phoneNo);
-        contentValues.put(ContactTable.ContactNameTable.cols.FIRST_NAME, name.getFirstName());
-        contentValues.put(ContactTable.ContactNameTable.cols.MIDDLE_NAME, name.getMiddleName());
-        contentValues.put(ContactTable.ContactNameTable.cols.LAST_NAME, name.getLastName());
 
         return contentValues;
     }
@@ -136,13 +113,13 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
         return contentValues;
     }
 
-    public static ContentValues getContentValues(OTPMessage message, String phoneNo){
+    public static ContentValues getContentValues(OTPMessage message){
         ContentValues contentValues = new ContentValues();
 
-        contentValues.put(ContactTable.cols.CONTACT_PHONE_NO, phoneNo);
-        contentValues.put(MessagesRecordTable.cols.MESSAGE_FROM, message.getFrom());
-        contentValues.put(MessagesRecordTable.cols.MESSAGE_BODY, message.getMsgBody());
-        contentValues.put(MessagesRecordTable.cols.MESSAGE_TIMESTAMP, message.getMessageTimestamp().getTime());
+        contentValues.put(MessagesRecordsTable.cols.MESSAGE_FROM, message.getFrom());
+        contentValues.put(MessagesRecordsTable.cols.MESSAGE_TO, message.getTo());
+        contentValues.put(MessagesRecordsTable.cols.MESSAGE_BODY, message.getMsgBody());
+        contentValues.put(MessagesRecordsTable.cols.MESSAGE_TIMESTAMP, message.getMessageTimestamp().getTime());
 
         return contentValues;
     }
@@ -152,52 +129,52 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
     public static void insertContactToDatabase(SQLiteDatabase db, Contact contact){
 
         db.insertOrThrow(ContactTable.NAME, null, getContentValues(contact));
-        db.insertOrThrow(ContactTable.ContactNameTable.NAME, null, getContentValues(contact.getContactName(), contact.getPhoneNo()));
         db.insertOrThrow(ContactTable.ContactAddressTable.NAME, null, getContentValues(contact.getAddress(), contact.getPhoneNo()));
     }
 
-    public static void insertMessageToDatabase(SQLiteDatabase db, OTPMessage message){
+    public static void insertContactsToDatabase(SQLiteDatabase db, Contact[] contacts){
 
-        if(!isExistingTable(db, MessagesRecordTable.NAME_PREFIX + message.getTo())){
-            createMesssageTable(db, message.getTo());
+        for(Contact contact : contacts){
+            db.insertOrThrow(ContactTable.NAME, null, getContentValues(contact));
+            db.insertOrThrow(ContactTable.ContactAddressTable.NAME, null, getContentValues(contact.getAddress(), contact.getPhoneNo()));
         }
-        db.insertOrThrow(MessagesRecordTable.NAME_PREFIX + message.getTo(), null, getContentValues(message, message.getTo()));
     }
 
-    public static void updateMessageInDatabase(SQLiteDatabase database, OTPMessage message, String phoneNo){
-        ContentValues values = getContentValues(message, phoneNo);
+    public static void insertContactsToDatabase(SQLiteDatabase db, List<Contact> contacts){
 
-        database.update(MessagesRecordTable.NAME_PREFIX + phoneNo, values,
-                ContactTable.cols.CONTACT_PHONE_NO + "=?", new String[]{phoneNo});
+        for(Contact contact : contacts){
+            db.insertOrThrow(ContactTable.NAME, null, getContentValues(contact));
+            db.insertOrThrow(ContactTable.ContactAddressTable.NAME, null, getContentValues(contact.getAddress(), contact.getPhoneNo()));
+        }
     }
-
 
     public static void updateContactInDatabase(SQLiteDatabase database, Contact contact){
 
         ContentValues values = getContentValues(contact);
         database.update(ContactTable.NAME, values,
-                ContactTable.cols.CONTACT_PHONE_NO + "=?", new String[]{contact.getPhoneNo()});
+                ContactTable.cols.CONTACT_PHONE_NO + " = ? ", new String[]{contact.getPhoneNo()});
     }
 
-    public static void updateContactNameInDatabase(SQLiteDatabase database, Contact contact){
+    //--------------------------------------------------------------------------------------------------------------------------
 
-        ContentValues values = getContentValues(contact.getContactName(), contact.getPhoneNo());
-
-        database.update(ContactTable.ContactNameTable.NAME, values,
-                ContactTable.cols.CONTACT_PHONE_NO + "=?", new String[]{contact.getPhoneNo()});
+    public static void insertMessageToDatabase2(SQLiteDatabase db, OTPMessage message){
+        if(!isExistingTable(db, MessagesRecordsTable.NAME)){
+            createMessageRecordsTable(db);
+        }
+        db.insertOrThrow(MessagesRecordsTable.NAME, null, getContentValues(message));
     }
 
-    public static void updateContactAddressInDatabase(SQLiteDatabase database, Contact contact){
+    public static void updateMessageInDatabase2(SQLiteDatabase database, OTPMessage message){
+        ContentValues values = getContentValues(message);
 
-        ContentValues values = getContentValues(contact.getAddress(), contact.getPhoneNo());
-
-        database.update(ContactTable.ContactAddressTable.NAME, values,
-                ContactTable.cols.CONTACT_PHONE_NO + "=?", new String[]{contact.getPhoneNo()});
+        database.update(MessagesRecordsTable.NAME, values,
+                MessagesRecordsTable.cols.MESSAGE_TO + " = ? ", new String[]{message.getTo()});
     }
+
 
     public static boolean isExistingTable(SQLiteDatabase db, String tableName){
         //Check for Learner's table
-        Cursor c = db.rawQuery("SELECT name FROM " + "sqlite_master" + " WHERE type = 'table' AND name = ?",
+        Cursor c = db.rawQuery("SELECT name FROM " + "sqlite_master" + " WHERE type = 'table' AND name = ? ",
                 new String[]{tableName});
         if(c.getCount() == 0){
             c.close();
@@ -208,13 +185,49 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
 
     // READ------------------------------------------------------------------------------------------------------------
 
-    public static List<OTPMessage> getMessagesRecordFromDatabase(SQLiteDatabase db, String phoneNo){
+    public static final int SORT_ORDER_ASC = 0x002;
+    public static final int SORT_ORDER_DESC = 0x004;
+    public static final int SORT_ORDER_NONE = 0x008;
+    public static final int SORT_BY_MSG_TIMESTAMPS = 0x0016;
+    public static List<OTPMessage> getAllMessageRecordsFromDb(SQLiteDatabase db, int sortOrder){
         if(!db.isOpen()){
             throw new SQLiteDatabaseLockedException("Database not open for reading");
         }
         List<OTPMessage> messages;
 
-        Cursor cMsg = db.rawQuery("SELECT * FROM " + MessagesRecordTable.NAME_PREFIX + phoneNo, null);
+        Cursor cMsg;
+
+        switch(sortOrder){
+
+            case SORT_ORDER_ASC:
+                cMsg = db.rawQuery(
+                        "SELECT * FROM " + MessagesRecordsTable.NAME
+                                + " ORDER BY " + MessagesRecordsTable.cols.MESSAGE_TIMESTAMP + " ASC "
+                        , null);
+                break;
+
+            case SORT_ORDER_DESC:
+                cMsg = db.rawQuery(
+                        "SELECT * FROM " + MessagesRecordsTable.NAME
+                                + " ORDER BY " + MessagesRecordsTable.cols.MESSAGE_TIMESTAMP + " DESC "
+                        , null);
+                break;
+
+            case SORT_ORDER_NONE:
+                cMsg = db.rawQuery(
+                        "SELECT * FROM " + MessagesRecordsTable.NAME
+                        , null);
+                break;
+
+            default:
+                // No such(the provided one) order valid.
+                Log.w(TAG, "The provided sort order: " + sortOrder + " is invalid.");
+                cMsg = db.rawQuery(
+                        "SELECT * FROM " + MessagesRecordsTable.NAME
+                        , null);
+                break;
+        }
+
         if(!cMsg.moveToFirst()){
             // Data is corrupt.
             Log.e(TAG, "No message record found.");
@@ -222,11 +235,13 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
         }
         else{
             messages = new ArrayList<>(cMsg.getCount());
+
+            // Populate the array.
             do{
                 OTPMessage message = null;
                 try{
-                    message = new OTPMessage(cMsg.getString(cMsg.getColumnIndex(MessagesRecordTable.cols.MESSAGE_FROM)),
-                            phoneNo);
+                    message = new OTPMessage(cMsg.getString(cMsg.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_FROM)),
+                            cMsg.getString(cMsg.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_TO)));
                 }
                 catch(OTPMessage.InvalidPhoneNoException ipne){
                     // Phone No is invalid.
@@ -234,9 +249,9 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
                 }
                 // Build the message and update the list.
                 if(message != null){
-                    message.setMsgBody(cMsg.getString(cMsg.getColumnIndex(MessagesRecordTable.cols.MESSAGE_BODY)));
+                    message.setMsgBody(cMsg.getString(cMsg.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_BODY)));
                     message.setMessageTimestamp(
-                            new Timestamp(cMsg.getLong(cMsg.getColumnIndex(MessagesRecordTable.cols.MESSAGE_TIMESTAMP))));
+                            new Timestamp(cMsg.getLong(cMsg.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_TIMESTAMP))));
                     // Add Message to the list
                     messages.add(message);
                 }
@@ -249,12 +264,105 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
 
     }
 
-    public static Map<Contact, List<OTPMessage>> getAllContactsAndMessagesFromDatabase(SQLiteDatabase db){
+    public static List<OTPMessage> getAMessagesRecordFromDb(SQLiteDatabase db, String contactPhoneNo, int sortOrder){
         if(!db.isOpen()){
             throw new SQLiteDatabaseLockedException("Database not open for reading");
         }
+        List<OTPMessage> messages;
+
+        Cursor cMsg;
+
+        switch(sortOrder){
+
+            case SORT_ORDER_ASC:
+                cMsg = db.rawQuery(
+                        "SELECT * FROM " + MessagesRecordsTable.NAME
+                        + " WHERE " + MessagesRecordsTable.cols.MESSAGE_TO + " = ? "
+                        + " ORDER BY " + MessagesRecordsTable.cols.MESSAGE_TIMESTAMP + " ASC "
+                        , new String[]{contactPhoneNo});
+                break;
+
+            case SORT_ORDER_DESC:
+                cMsg = db.rawQuery(
+                        "SELECT * FROM " + MessagesRecordsTable.NAME
+                                + " WHERE " + MessagesRecordsTable.cols.MESSAGE_TO + " = ? "
+                                + " ORDER BY " + MessagesRecordsTable.cols.MESSAGE_TIMESTAMP + " DESC "
+                        , new String[]{contactPhoneNo});
+                break;
+
+            case SORT_ORDER_NONE:
+                cMsg = db.rawQuery(
+                        "SELECT * FROM " + MessagesRecordsTable.NAME
+                                + " WHERE " + MessagesRecordsTable.cols.MESSAGE_TO + " = ? "
+                        , new String[]{contactPhoneNo});
+                break;
+
+            default:
+                // No such(the provided one) order valid.
+                Log.w(TAG, "The provided sort order: " + sortOrder + " is invalid.");
+                cMsg = db.rawQuery(
+                        "SELECT * FROM " + MessagesRecordsTable.NAME
+                                + " WHERE " + MessagesRecordsTable.cols.MESSAGE_TO + " = ? "
+                        , new String[]{contactPhoneNo});
+                break;
+        }
+
+        if(!cMsg.moveToFirst()){
+            // Data is corrupt.
+            Log.e(TAG, "No message record found.");
+            return null;
+        }
+        else{
+            messages = new ArrayList<>(cMsg.getCount());
+
+            // Populate the array.
+            do{
+                OTPMessage message = null;
+                try{
+                    message = new OTPMessage(cMsg.getString(cMsg.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_FROM)),
+                            cMsg.getString(cMsg.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_TO)));
+                }
+                catch(OTPMessage.InvalidPhoneNoException ipne){
+                    // Phone No is invalid.
+                    Log.e(TAG, "Contact Phone No is invalid");
+                }
+                // Build the message and update the list.
+                if(message != null){
+                    message.setMsgBody(cMsg.getString(cMsg.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_BODY)));
+                    message.setMessageTimestamp(
+                            new Timestamp(cMsg.getLong(cMsg.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_TIMESTAMP))));
+                    // Add Message to the list
+                    messages.add(message);
+                }
+
+            }while(cMsg.moveToNext());
+        }
+        cMsg.close();
+
+        return messages;
+
+    }
+
+    public static Map<Contact, List<OTPMessage>> getAllContactsAndMessagesFromDatabase(SQLiteDatabase db, int sortOrder){
+        if(!db.isOpen()){
+            throw new SQLiteDatabaseLockedException("Database not open for reading");
+        }
+
+        // Correct the sort order if its not.
+        switch(sortOrder){
+            case SORT_ORDER_ASC:
+                break;
+            case SORT_ORDER_DESC:
+                break;
+            case SORT_ORDER_NONE:
+                break;
+            default:
+                sortOrder = SORT_ORDER_NONE;
+                break;
+        }
+
         Map<Contact, List<OTPMessage>> contactsAndMessages;
-        Cursor c, cName, cAddr;
+        Cursor c, cAddr;
         // Before running the query, check if the Table exists
         if(!isExistingTable(db, ContactTable.NAME)){
             return null;
@@ -262,16 +370,7 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
         c = db.rawQuery("SELECT * FROM " + ContactTable.NAME, null);
         contactsAndMessages = new LinkedHashMap<Contact, List<OTPMessage>>(c.getCount());
 
-        // Now using this Phone No, get the Name and Address
-        cName = db.rawQuery("SELECT * FROM " + ContactTable.ContactNameTable.NAME, null);
-
-        cAddr = db.rawQuery("SELECT * FROM " + ContactTable.ContactAddressTable.NAME, null);
-        if(!cAddr.moveToFirst()){
-            // Data is corrupt.
-            Log.d(TAG, "Contact address is not empty.");
-        }
-
-        if(!c .moveToFirst() || !cName.moveToFirst()){
+        if(!c .moveToFirst()){
             // Data is corrupt.
             Log.e(TAG, "Contact data is corrupt.(Names)");
             return null;
@@ -279,28 +378,41 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
         else{
             do{
 
-                List<OTPMessage> messages = new LinkedList<OTPMessage>();
+                List<OTPMessage> messages;
+
+                Contact contact;
 
                 // Get the Phone No. first
                 String phoneNo = c.getString(c.getColumnIndex(ContactTable.cols.CONTACT_PHONE_NO));
 
                 Contact.Name name = null;
-                Contact contact = null;
-                Contact.Address address = null;
-
                 name = new Contact.Name(
-                        cName.getString(cName.getColumnIndex(ContactTable.ContactNameTable.cols.FIRST_NAME)),
-                        cName.getString(cName.getColumnIndex(ContactTable.ContactNameTable.cols.MIDDLE_NAME)),
-                        cName.getString(cName.getColumnIndex(ContactTable.ContactNameTable.cols.LAST_NAME)));
+                        c.getString(c.getColumnIndex(ContactTable.cols.FIRST_NAME)),
+                        c.getString(c.getColumnIndex(ContactTable.cols.MIDDLE_NAME)),
+                        c.getString(c.getColumnIndex(ContactTable.cols.LAST_NAME)));
 
-                if(cAddr.moveToNext()){
+                // Using the Phone No, retrieve the corresponding Address from the Address table.
+                cAddr = db.rawQuery(
+                        "SELECT * FROM " + ContactTable.ContactAddressTable.NAME
+                        + " WHERE " + ContactTable.cols.CONTACT_PHONE_NO + " = ? "
+                        , new String[]{phoneNo});
+
+                Contact.Address address = null;
+                // Is there a valid address?
+                if(!cAddr.moveToFirst()){
+                    Log.i(TAG, "The Address corresponding to the Contact with Phone No: " + phoneNo + " is non-existent/empty.");
+                }
+                else{
                     address = Contact.Address.Builder
                             .newBuilder(
                                     cAddr.getString(cAddr.getColumnIndex(ContactTable.ContactAddressTable.cols.FIRST_LINE)),
-                                    cAddr.getString(cAddr.getColumnIndex(ContactTable.ContactAddressTable.cols.CITY)))
+                                    cAddr.getString(cAddr.getColumnIndex(ContactTable.ContactAddressTable.cols.CITY))
+                            )
                             .setSecondLine(cAddr.getString(cAddr.getColumnIndex(ContactTable.ContactAddressTable.cols.SECOND_LINE)))
                             .setPostalCode(cAddr.getInt((cAddr.getColumnIndex(ContactTable.ContactAddressTable.cols.POSTAL_CODE))))
                             .createAddress();
+
+                    cAddr.close();
                 }
 
                 contact = new Contact(name, phoneNo);
@@ -315,47 +427,167 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
 
                 contact.setEmailId(emailId);
 
-                // Retrieve the list of all messages sent.
-                Cursor cMsg = db.rawQuery("SELECT * FROM " + MessagesRecordTable.NAME_PREFIX + contact.getPhoneNo(), null);
-                if(!cMsg.moveToFirst()){
-                    // Data is corrupt.
-                    Log.d(TAG, "No messages sent to this contact yet.");
-                }
-                else{
-                    do{
-                        OTPMessage message = null;
-                        try{
-                            message = new OTPMessage(cMsg.getString(cMsg.getColumnIndex(MessagesRecordTable.cols.MESSAGE_FROM)),
-                                    phoneNo);
-                        }
-                        catch(OTPMessage.InvalidPhoneNoException ipne){
-                            // Phone No is invalid.
-                            Log.e(TAG, "Contact Phone No is invalid");
-                        }
-                        // Build the message and update the list.
-                        if(message != null){
-                            message.setMsgBody(cMsg.getString(cMsg.getColumnIndex(MessagesRecordTable.cols.MESSAGE_BODY)));
-                            message.setMessageTimestamp(
-                                    new Timestamp(cMsg.getLong(cMsg.getColumnIndex(MessagesRecordTable.cols.MESSAGE_TIMESTAMP))));
-                            // Add Message to the list
-                            messages.add(message);
-                        }
-
-                    }while(cMsg.moveToNext());
-                }
-                cMsg.close();
+                // Retrieve the list of all the messages sent to this contact.
+                messages = getAMessagesRecordFromDb(db, phoneNo, sortOrder);
 
                 // Update the Map
                 contactsAndMessages.put(contact, messages);
 
-            }while(c.moveToNext() && cName.moveToNext());
+            }while(c.moveToNext());
 
             c.close();
-            cName.close();
-            cAddr.close();
         }
 
         return contactsAndMessages;
+    }
+
+    /**
+     * Get the entire messages' combined sent history sorted by the specified order with
+     * A {@link Map} of all the {@link Contact}(s) for which at least one message has been sent.
+     *
+     * @param db : A readable {@link SQLiteDatabase} instance.
+     * @param sortOrder : The order in which the entire(combined) message history should be sorted
+     * @return : Mapping of every {@link OTPMessage} sent and its corresponding {@link Contact}
+     */
+    public static Map<OTPMessage, Contact> getAllMessagesAndContactsFromDb(SQLiteDatabase db, int sortOrder){
+        if(!db.isOpen()){
+            throw new SQLiteDatabaseLockedException("Database not open for reading");
+        }
+
+        String sOrder = null;
+        // Correct the sort order if its not.
+        switch(sortOrder){
+            case SORT_ORDER_ASC:
+                sOrder = "ASC";
+                break;
+            case SORT_ORDER_DESC:
+                sOrder = "DESC";
+                break;
+            case SORT_ORDER_NONE:
+                break;
+            default:
+                sortOrder = SORT_ORDER_NONE;
+                break;
+        }
+
+        Map<String, Contact> contactsMap = new HashMap<>();
+        Map<OTPMessage, Contact> messagesAndContacts;
+
+        Cursor c, cAddr;
+        // Before running the query, check if the Tables exist
+        if(!isExistingTable(db, ContactTable.NAME)){
+            Log.e(TAG, "Contact Table doesn't exist.");
+            return null;
+        }
+        if(!isExistingTable(db, MessagesRecordsTable.NAME)){
+            Log.e(TAG, "Messages Table doesn't exist.");
+            return null;
+        }
+
+        // Create a JOIN query for the Contacts and Messages Table.
+        c = db.rawQuery(
+                "SELECT * FROM " + MessagesRecordsTable.NAME
+                + " LEFT JOIN " + ContactTable.NAME
+                + " ON " + ContactTable.cols.CONTACT_PHONE_NO + " = " + MessagesRecordsTable.cols.MESSAGE_TO
+                + (sOrder != null ? (" ORDER BY " + MessagesRecordsTable.cols.MESSAGE_TIMESTAMP + " " + sOrder) : "")
+                , null);
+
+        messagesAndContacts = new LinkedHashMap<OTPMessage, Contact>(c.getCount());
+
+        if(!c .moveToFirst()){
+            Log.e(TAG, "Both Contact and Messages tables have no data.");
+            return null;
+        }
+        else{
+
+            do{
+
+                Contact contact;
+                OTPMessage message = null;
+
+                // Get the Phone No. first
+                String phoneNo = c.getString(c.getColumnIndex(ContactTable.cols.CONTACT_PHONE_NO));
+                // Check if this Contact for this Phone No has already been retrieved.
+                if(contactsMap.get(phoneNo) != null){
+                    // Reuse the same contact
+                    contact = contactsMap.get(phoneNo);
+                }
+                else{
+                    // Build a new contact.
+                    Contact.Name name = null;
+                    name = new Contact.Name(
+                            c.getString(c.getColumnIndex(ContactTable.cols.FIRST_NAME)),
+                            c.getString(c.getColumnIndex(ContactTable.cols.MIDDLE_NAME)),
+                            c.getString(c.getColumnIndex(ContactTable.cols.LAST_NAME)));
+
+                    // Using the Phone No, retrieve the corresponding Address from the Address table.
+                    cAddr = db.rawQuery(
+                            "SELECT * FROM " + ContactTable.ContactAddressTable.NAME
+                                    + " WHERE " + ContactTable.cols.CONTACT_PHONE_NO + " = ? "
+                            , new String[]{phoneNo});
+
+                    Contact.Address address = null;
+                    // Is there a valid address?
+                    if(!cAddr.moveToFirst()){
+                        Log.i(TAG, "The Address corresponding to the Contact with Phone No: " + phoneNo + " is non-existent/empty.");
+                    }
+                    else{
+                        address = Contact.Address.Builder
+                                .newBuilder(
+                                        cAddr.getString(cAddr.getColumnIndex(ContactTable.ContactAddressTable.cols.FIRST_LINE)),
+                                        cAddr.getString(cAddr.getColumnIndex(ContactTable.ContactAddressTable.cols.CITY))
+                                )
+                                .setSecondLine(cAddr.getString(cAddr.getColumnIndex(ContactTable.ContactAddressTable.cols.SECOND_LINE)))
+                                .setPostalCode(cAddr.getInt((cAddr.getColumnIndex(ContactTable.ContactAddressTable.cols.POSTAL_CODE))))
+                                .createAddress();
+
+                        cAddr.close();
+                    }
+
+                    contact = new Contact(name, phoneNo);
+
+                    if(address != null){
+                        contact.setAddress(address);
+                    }
+                    // Build the rest of the contact now.
+
+                    // Get the Email ID
+                    String emailId = c.getString(c.getColumnIndex(ContactTable.cols.CONTACT_EMAIL_ID));
+
+                    contact.setEmailId(emailId);
+
+                    // Save this contact for reuse.
+                    contactsMap.put(phoneNo, contact);
+                }
+
+                // Create a Message
+                try{
+                    message = new OTPMessage(c.getString(c.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_FROM)),
+                            c.getString(c.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_TO)));
+                }
+                catch(OTPMessage.InvalidPhoneNoException ipne){
+                    // Phone No is invalid.
+                    Log.e(TAG, "Contact Phone No is invalid");
+                    // TODO: Think of something appropriate.
+                }
+                // Build the message and update the list.
+                // TODO: Since a contact without any message would be meaningless in the current
+                // situation, move this to the top.
+                if(message != null){
+                    message.setMsgBody(c.getString(c.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_BODY)));
+                    message.setMessageTimestamp(
+                            new Timestamp(c.getLong(c.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_TIMESTAMP))));
+
+                    // Pair up this message with the contact
+                    messagesAndContacts.put(message, contact);
+                }
+
+            }while(c.moveToNext());
+
+            c.close();
+        }
+
+        return messagesAndContacts;
     }
 
     // Utility Methods------------------------------------------------------------------------------------------------------
