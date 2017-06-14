@@ -17,6 +17,7 @@ import com.otpone.otpone.database.ContactsDbHelper;
 import com.otpone.otpone.model.Contact;
 import com.otpone.otpone.model.OTPMessage;
 import com.otpone.otpone.model.Repository;
+import com.otpone.otpone.util.ListUtil;
 import com.otpone.otpone.util.MapUtil;
 import com.otpone.otpone.util.mocks.MockMessageSendingTask;
 import com.plivo.helper.api.client.RestAPI;
@@ -299,28 +300,50 @@ public class SendOTPActivity extends AppCompatActivity {
      */
     public static class SentMessageEvent {
 
-        private Map<OTPMessage, Contact> sentMessagesAndContacts = new LinkedHashMap<>();
-        private Map<UUID, List<Integer>> messagesConsumptionStatuses = new LinkedHashMap<>();
-        private Map<UUID, Integer> currentConsumptionStatus;
+        private List<Pair<OTPMessage, Contact>> sentMessagesAndContacts = new LinkedList<>();
+        //private Map<UUID, List<Integer>> messagesConsumptionStatuses = new LinkedHashMap<>();
+        private Map<UUID, Integer> currentConsumptionStatus = new LinkedHashMap<>();;
 
-        public void addNewSentMessages(Map<OTPMessage, Contact> messagesToBeAdded){
-            sentMessagesAndContacts.putAll(messagesToBeAdded);
-            updateMessageConsumptionTrackingCounters(messagesToBeAdded);
+        public void addNewSentMessages(List<Pair<OTPMessage, Contact>> messagesToBeAdded){
+            synchronized (this){
+                sentMessagesAndContacts.addAll(messagesToBeAdded);
+            }
+            //updateMessageConsumptionTrackingCounters(messagesToBeAdded);
         }
 
         public void addNewSentMessages(List<OTPMessage> messages, Contact contact){
-            Map<OTPMessage, Contact> messagesToBeAdded = MapUtil.getMap(new LinkedHashMap<>(), (List)messages, contact);
-            sentMessagesAndContacts.putAll(messagesToBeAdded);
-            updateMessageConsumptionTrackingCounters(messagesToBeAdded);
+
+            List<Pair<OTPMessage, Contact>> messagesToBeAdded;
+            messagesToBeAdded = ListUtil.toListOfPairs(messages, contact);
+            synchronized (this){
+                sentMessagesAndContacts.addAll(messagesToBeAdded);
+            }
+
+            //updateMessageConsumptionTrackingCounters(messagesToBeAdded);
         }
 
-        private void updateMessageConsumptionTrackingCounters(Map<OTPMessage, Contact> messages){
+        public void addNewSentMessage(OTPMessage message, Contact associatedContact){
+            synchronized (this){
+                sentMessagesAndContacts.add(new Pair<OTPMessage, Contact>(message, associatedContact));
+            }
+            //updateMessageConsumptionTrackingCounter();
+        }
+
+        /*
+         * Updates the messages consumption status for these new messages.
+         * @param messages The mapping of messages that have been sent with their corresponding Contacts.
+         */
+        /*private void updateMessageConsumptionTrackingCounters(Map<OTPMessage, Contact> messages){
             int i;
-            Set<UUID> currentKeys = messagesConsumptionStatuses.keySet();
+            Set<UUID> consumerTokens;
+
+            synchronized (this){
+                consumerTokens = messagesConsumptionStatuses.keySet();
+            }
 
             List<Integer> counters;
             // For each Token, update the list with new sent messages count tracker
-            for(UUID token : currentKeys){
+            for(UUID token : consumerTokens){
                 counters = messagesConsumptionStatuses.get(token);
                 // If concurrent access is allowed to the following block,
                 // it is possible that the new counter might be same for
@@ -330,18 +353,23 @@ public class SendOTPActivity extends AppCompatActivity {
                     // Get the new counter value for these new messages
                     i = counters.get(counters.size() - 1) + 1;
                     // Make a list for this counter(corresponding to the new messages) with "nCopies"
-                    counters.addAll(Collections.nCopies(messages.size(), i));
+                    counters.addAll(Collections.nCopies(messages.size(), -1));
                 }
             }
         }
 
         private void updateMessageConsumptionTrackingCounter(){
             int i;
-            Set<UUID> currentKeys = messagesConsumptionStatuses.keySet();
+
+            Set<UUID> consumerTokens;
+
+            synchronized (this){
+                consumerTokens = messagesConsumptionStatuses.keySet();
+            }
 
             List<Integer> counters;
             // For each Token, update the list with new sent messages count tracker
-            for(UUID token : currentKeys){
+            for(UUID token : consumerTokens){
                 counters = messagesConsumptionStatuses.get(token);
                 // If concurrent access is allowed to the following block,
                 // it is possible that the new counter might be same for
@@ -351,17 +379,10 @@ public class SendOTPActivity extends AppCompatActivity {
                     // Get the new counter value for these new messages
                     i = counters.get(counters.size() - 1) + 1;
                     // Make a list for this counter(corresponding to the new messages) with "nCopies"
-                    counters.add(i);
+                    counters.add(-1);
                 }
             }
-        }
-
-        public void addNewSentMessage(OTPMessage message, Contact associatedContact){
-            synchronized (this){
-                sentMessagesAndContacts.put(message, associatedContact);
-            }
-            updateMessageConsumptionTrackingCounter();
-        }
+        }*/
 
         /**
          * It is possible that the list may not reflect the true number of
@@ -370,10 +391,10 @@ public class SendOTPActivity extends AppCompatActivity {
          *
          * @return An unmodifiable snapshot(list) of the messages that have been sent.
          */
-        public final Map<OTPMessage, Contact> getSentMessagesAndContacts() {
-            Map<OTPMessage, Contact> messageListToBeSent;
+        public List<Pair<OTPMessage, Contact>> getSentMessagesAndContacts() {
+            List<Pair<OTPMessage, Contact>> messageListToBeSent;
             synchronized (this){
-                messageListToBeSent = Collections.unmodifiableMap(sentMessagesAndContacts);
+                messageListToBeSent = Collections.unmodifiableList(sentMessagesAndContacts);
             }
             return messageListToBeSent;
         }
@@ -385,9 +406,11 @@ public class SendOTPActivity extends AppCompatActivity {
          * of several individual sent message events. It depends on when this method is
          * called.
          */
-        public Map<OTPMessage, Contact> getSentMessages(UUID token){
-            Map<OTPMessage, Contact> messagesToBeConsumed;
-            if(!messagesConsumptionStatuses.containsKey(token)){
+        public List<Pair<OTPMessage, Contact>> getSentMessages(UUID token){
+
+            List<Pair<OTPMessage, Contact>> messageListToBeSent;
+
+            if(!currentConsumptionStatus.containsKey(token)){
                 // It is possible that before entering this method, we had 3 messages sent
                 // and at this point 3 messages are supposed to be consumed as per the event
                 // but the sent messages list gets updated and 3 more are added. Then, in the
@@ -404,59 +427,33 @@ public class SendOTPActivity extends AppCompatActivity {
                 // If these events are all thrown then 98 of them shall return an empty list. Woah!
                 // This can only be controlled by the channeler of these events by filtering them.
                 synchronized (this){
-                    messagesConsumptionStatuses.put(token, new ArrayList<Integer>(Collections.nCopies(sentMessagesAndContacts.size(), 0)));
-                    // Also update the current consumption status
-                    currentConsumptionStatus = new LinkedHashMap<>();
-                    currentConsumptionStatus.put(token, 0);
+                    //messagesConsumptionStatuses.put(token, new ArrayList<Integer>(Collections.nCopies(sentMessagesAndContacts.size(), 0)));
+                    // Update the current consumption status
+                    currentConsumptionStatus.put(token, sentMessagesAndContacts.size() - 1);
                     // Initially, return whatever has been sent
-                    Map<OTPMessage, Contact> messageListToBeSent;
-                    messageListToBeSent = Collections.unmodifiableMap(sentMessagesAndContacts);
+                    messageListToBeSent = Collections.unmodifiableList(sentMessagesAndContacts);
                     return messageListToBeSent;
                 }
             }
             else{
-                messagesToBeConsumed = new LinkedHashMap<>();
-                Collection<Integer> consumptionCounters = messagesConsumptionStatuses.get(token);
-                // Check the current consumption status and update this status
-                // to a newer one. Return all the messages with the newer consumption
-                // status
-                int consumptionIndex = currentConsumptionStatus.get(token);
-                // Search for all messages we have for consumptionIndex + 1
 
-                Set<Map.Entry<OTPMessage, Contact>> sentMessagesAndContactsSet = sentMessagesAndContacts.entrySet();
-                Iterator<Map.Entry<OTPMessage, Contact>> iter = sentMessagesAndContactsSet.iterator();
-                int i =0;
-                for(Integer counter : consumptionCounters){
-                    if(counter > consumptionIndex + 1){
-                        break;
-                    }
-                    // Get the message at this index
-                    Map.Entry<OTPMessage, Contact> entry = iter.next();
+                int currentConsumptionIndex = this.currentConsumptionStatus.get(token);
 
-                    if(counter == consumptionIndex + 1){
+                synchronized (this){
+                    currentConsumptionStatus.put(token, sentMessagesAndContacts.size() - 1);
+                    messageListToBeSent = Collections.unmodifiableList(sentMessagesAndContacts.subList(currentConsumptionIndex + 1, sentMessagesAndContacts.size()));
 
-                        OTPMessage message = entry.getKey();
-                        Contact c = entry.getValue();
-
-                        i++;
-                        // Add this message to a list of sent messages
-                        messagesToBeConsumed.put(message, c);
-                    }
                 }
-                // Update the current consumption index
-                currentConsumptionStatus.put(token, consumptionIndex + 1);
+
             }
-            return messagesToBeConsumed;
+
+            return messageListToBeSent;
         }
 
-        public void removeObserver(UUID token){
-            if(!messagesConsumptionStatuses.containsKey(token)){
-                // Make sure no more messages are added for this observer during
-                // removal.
-                synchronized (this){
-                    messagesConsumptionStatuses.remove(token);
-                    currentConsumptionStatus.remove(token);
-                }
+        public synchronized void removeObserver(UUID token){
+
+            if(!currentConsumptionStatus.containsKey(token)){
+                currentConsumptionStatus.remove(token);
             }
         }
 

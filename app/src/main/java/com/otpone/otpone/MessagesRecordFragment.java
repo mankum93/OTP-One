@@ -3,6 +3,7 @@ package com.otpone.otpone;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
+import android.support.v4.util.Pair;
 import android.support.v7.widget.DividerItemDecoration;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -30,7 +31,7 @@ public class MessagesRecordFragment extends Fragment {
     private MessagesRecordListAdapter adapter;
 
     private boolean noChange = false;
-    private Map<OTPMessage, Contact> messagesAndContacts;
+    private List<Pair<OTPMessage, Contact>> messagesAndContacts;
     private static final String EXTRA_DISPLAY_STATUS = "EXTRA_DISPLAY_STATUS";
 
     private Repository repo;
@@ -112,35 +113,21 @@ public class MessagesRecordFragment extends Fragment {
      */
     private static class MessagesRecordListAdapter extends RecyclerView.Adapter<MessageViewHolder> implements RecyclerViewClickListener{
 
-        private Map<OTPMessage, Contact> messagesAndContacts;
-        private List<OTPMessage> aggregateList;
+        private List<Pair<OTPMessage, Contact>> messagesAndContacts;
 
-        public MessagesRecordListAdapter(Map<OTPMessage, Contact> messagesAndContacts) {
-            this.messagesAndContacts = messagesAndContacts;
+        public MessagesRecordListAdapter(List<Pair<OTPMessage, Contact>> messagesAndContacts) {
 
-            if(aggregateList == null){
-                aggregateList = new LinkedList<>();
-            }
-            else{
-                aggregateList.clear();
-            }
+            this.messagesAndContacts = new LinkedList<>();
+
             if(messagesAndContacts != null){
-                aggregateList.addAll(messagesAndContacts.keySet());
+                this.messagesAndContacts.addAll(messagesAndContacts);
             }
         }
 
-        public void refreshMessagesAndContacts(Map<OTPMessage, Contact> messagesAndContacts) {
-            this.messagesAndContacts = messagesAndContacts;
-
-            // Setting this means refreshing the list as well.
-            if(aggregateList == null){
-                aggregateList = new LinkedList<>();
-            }
-            else{
-                aggregateList.clear();
-            }
-            if(messagesAndContacts != null){
-                aggregateList.addAll(messagesAndContacts.keySet());
+        public void refreshMessagesAndContacts(List<Pair<OTPMessage, Contact>> messagesAndContacts) {
+            if(messagesAndContacts != null && !messagesAndContacts.isEmpty()){
+                this.messagesAndContacts.clear();
+                this.messagesAndContacts.addAll(messagesAndContacts);
             }
         }
 
@@ -159,10 +146,12 @@ public class MessagesRecordFragment extends Fragment {
         @Override
         public void onBindViewHolder(MessageViewHolder holder, int position) {
 
-            OTPMessage messageToBeBound = aggregateList.get(position);
+            Pair<OTPMessage, Contact> pair = messagesAndContacts.get(position);
+            OTPMessage messageToBeBound = pair.first;
+            Contact contact= pair.second;
 
             // Bind the Name
-            holder.getContactName().setText(messagesAndContacts.get(messageToBeBound).getName().toString());
+            holder.getContactName().setText(contact.getName().toString());
             // Bind the Time Stamp
             holder.getTimeMessageSent().setText(DateTimeUtils.timeStampToHH_MMFormat(messageToBeBound.getMessageTimestamp()));
             // Bind the Message content.
@@ -171,7 +160,7 @@ public class MessagesRecordFragment extends Fragment {
 
         @Override
         public int getItemCount() {
-            return aggregateList.size();
+            return messagesAndContacts.size();
         }
 
         @Override

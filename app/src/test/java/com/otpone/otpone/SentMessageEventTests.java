@@ -78,7 +78,7 @@ public class SentMessageEventTests {
     }
 
     @Test
-    //@Ignore
+    @Ignore
     public void shouldConsumeTheProducedSentMessageEventsAllTogether(){
 
         PowerMockito.mockStatic(Log.class);
@@ -125,7 +125,7 @@ public class SentMessageEventTests {
 
 
     @Test
-    @Ignore
+    //@Ignore
     public void shouldConsumeTheProducedSentMessageEventsInASynchronousCoordinatedWay(){
 
         PowerMockito.mockStatic(Log.class);
@@ -183,7 +183,7 @@ public class SentMessageEventTests {
         @Override
         public void run() {
             // Schedule production of Messages and Contacts.
-            sentMessageEvent.addNewSentMessages(toContactsAndMessages(otpMessageMultiGenerator.next(numberOfMessages)));
+            sentMessageEvent.addNewSentMessages(otpMessageMultiGenerator.next(numberOfMessages));
         }
 
         private Map<OTPMessage, Contact> toContactsAndMessages(List<Pair<OTPMessage, Contact>> contactAndMessagePairs){
@@ -218,7 +218,7 @@ public class SentMessageEventTests {
 
         @Override
         public void run() {
-            Map<OTPMessage, Contact> vals = sentMessageEvent.getSentMessages(consumerId);
+            List<Pair<OTPMessage, Contact>> vals = sentMessageEvent.getSentMessages(consumerId);
             logger.info("Consumed messages by Consumer: " + consumerId.toString() + "\n" + vals.toString());
         }
     }

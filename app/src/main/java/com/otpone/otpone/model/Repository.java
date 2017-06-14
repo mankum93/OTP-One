@@ -4,6 +4,7 @@ import android.app.Application;
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import android.support.annotation.NonNull;
+import android.support.v4.util.Pair;
 import android.util.Log;
 
 import com.otpone.otpone.SendOTPActivity;
@@ -15,12 +16,12 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
 import java.io.File;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.otpone.otpone.database.ContactsDbHelper.DATABASE_NAME;
@@ -42,7 +43,7 @@ public class Repository {
     /**
      * Mapping of every {@link OTPMessage} sent for its corresponding {@link Contact}
      */
-    private ListOrderedMap<OTPMessage, Contact> messagesAndContacts;
+    private List<Pair<OTPMessage, Contact>> messagesAndContacts;
 
     public SQLiteDatabase db;
     public ContactsDbHelper helper;
@@ -73,14 +74,14 @@ public class Repository {
     public void init(){
         // It is known that all the messages and contacts should be loaded.
         if(isExistingDbOnThisDevice(context)){
-            contactsAndMessages = ContactsDbHelper.getAllContactsAndMessagesFromDatabase(db, ContactsDbHelper.SORT_ORDER_DESC);
+            contactsAndMessages = ContactsDbHelper.getAllContactsAndMessagesFromDb(db, ContactsDbHelper.SORT_ORDER_DESC);
         }
 
         // And now, retrieve the contacts for whom messages have been sent.
         if(contactsAndMessages != null && !contactsAndMessages.isEmpty()){
-            Map<OTPMessage, Contact> msgsAndCtcts= ContactsDbHelper.getAllMessagesAndContactsFromDb(db, ContactsDbHelper.SORT_ORDER_DESC);
+            List<Pair<OTPMessage, Contact>> msgsAndCtcts= ContactsDbHelper.getAllMessagesAndContactsFromDb(db, ContactsDbHelper.SORT_ORDER_DESC);
             if(msgsAndCtcts != null){
-                messagesAndContacts = ListOrderedMap.listOrderedMap(msgsAndCtcts);
+                messagesAndContacts = msgsAndCtcts;
             }
         }
 
@@ -125,9 +126,9 @@ public class Repository {
 
         // It is known that all the messages and contacts should be loaded.
         if(isExistingDbOnThisDevice(context)){
-            Map<OTPMessage, Contact> msgsAndCtcts= ContactsDbHelper.getAllMessagesAndContactsFromDb(db, ContactsDbHelper.SORT_ORDER_DESC);
+            List<Pair<OTPMessage, Contact>> msgsAndCtcts= ContactsDbHelper.getAllMessagesAndContactsFromDb(db, ContactsDbHelper.SORT_ORDER_DESC);
             if(msgsAndCtcts != null){
-                messagesAndContacts = ListOrderedMap.listOrderedMap(msgsAndCtcts);
+                messagesAndContacts = msgsAndCtcts;
             }
         }
         return contactsAndMessages;
@@ -137,17 +138,17 @@ public class Repository {
         this.contactsAndMessages = contactsAndMessages;
     }
 
-    public Map<OTPMessage, Contact> getMessagesAndContacts() {
+    public List<Pair<OTPMessage, Contact>> getMessagesAndContacts() {
         return messagesAndContacts;
     }
 
-    public Map<OTPMessage, Contact> refreshMessagesAndContacts() {
+    public List<Pair<OTPMessage, Contact>> refreshMessagesAndContacts() {
 
         // Retrieve the contacts for whom messages have been sent.
         if(contactsAndMessages != null && !contactsAndMessages.isEmpty()){
-            Map<OTPMessage, Contact> msgsAndCtcts= ContactsDbHelper.getAllMessagesAndContactsFromDb(db, ContactsDbHelper.SORT_ORDER_DESC);
+            List<Pair<OTPMessage, Contact>> msgsAndCtcts= ContactsDbHelper.getAllMessagesAndContactsFromDb(db, ContactsDbHelper.SORT_ORDER_DESC);
             if(msgsAndCtcts != null){
-                messagesAndContacts = ListOrderedMap.listOrderedMap(msgsAndCtcts);
+                messagesAndContacts = msgsAndCtcts;
             }
         }
 
@@ -159,19 +160,20 @@ public class Repository {
         return messagesAndContacts;
     }
 
-    public void setMessagesAndContacts(Map<OTPMessage, Contact> messagesAndContacts) {
-        this.messagesAndContacts = ListOrderedMap.listOrderedMap(messagesAndContacts);
+    public void setMessagesAndContacts(List<Pair<OTPMessage, Contact>> messagesAndContacts) {
+        this.messagesAndContacts = messagesAndContacts;
     }
 
-    public void updateMessagesAndContacts(Map<OTPMessage, Contact> messagesAndContacts) {
+    public void updateMessagesAndContacts(List<Pair<OTPMessage, Contact>> messagesAndContacts) {
 
         // For first time, messagesAndContacts will be null. So, instantiate it
         if(this.messagesAndContacts == null){
-            this.messagesAndContacts = ListOrderedMap.listOrderedMap(new LinkedHashMap<OTPMessage, Contact>());
+            this.messagesAndContacts = new LinkedList<>();
         }
         if(messagesAndContacts != null && !messagesAndContacts.isEmpty()){
-            for(Map.Entry<OTPMessage, Contact> entry : messagesAndContacts.entrySet()){
-                updateMessagesAndContacts(entry.getKey(), entry.getValue());
+
+            for(Pair<OTPMessage, Contact> entry : messagesAndContacts){
+                updateMessagesAndContacts(entry.first, entry.second);
             }
         }
     }
@@ -183,7 +185,7 @@ public class Repository {
 
         // For first time, messagesAndContacts will be null. So, instantiate it
         if(this.messagesAndContacts == null){
-            this.messagesAndContacts = ListOrderedMap.listOrderedMap(new LinkedHashMap<OTPMessage, Contact>());
+            this.messagesAndContacts = new LinkedList<>();
         }
 
         // Check if this Contact is existing.
@@ -197,7 +199,7 @@ public class Repository {
             this.contactsAndMessages.put(contact, messages);
 
             // Then update the Messages and Contacts
-            this.messagesAndContacts.put(0, message, contact);
+            this.messagesAndContacts.add(0, new Pair<OTPMessage, Contact>(message, contact));
         }
         else{
             // Add it to the beginning because the messages are
@@ -206,13 +208,18 @@ public class Repository {
             this.contactsAndMessages.remove(contact);
             this.contactsAndMessages.put(contact, messages);
 
-            this.messagesAndContacts.put(0, message, contact);
+            this.messagesAndContacts.add(0, new Pair<OTPMessage, Contact>(message, contact));
         }
     }
 
     private void unifyDuplicateContacts(){
 
-        for(Contact contact : new HashSet<>(messagesAndContacts.values())){
+        Set<Contact> contacts = new HashSet<>();
+        for(Pair<OTPMessage, Contact> pair : new HashSet<>(messagesAndContacts)){
+            contacts.add(pair.second);
+        }
+
+        for(Contact contact : contacts){
             if(contactsAndMessages.containsKey(contact)){
                 // Duplicate Contact. Replace.
                 contactsAndMessages.put(contact, contactsAndMessages.remove(contact));
@@ -243,6 +250,17 @@ public class Repository {
         else{
             return true;
         }
+    }
+
+    public static Map<OTPMessage, Contact> toContactsAndMessages(List<Pair<OTPMessage, Contact>> contactAndMessagePairs){
+
+        Map<OTPMessage, Contact> map = new LinkedHashMap<>();
+
+        for(Pair<OTPMessage, Contact> pair : contactAndMessagePairs){
+            map.put(pair.first, pair.second);
+        }
+
+        return map;
     }
 
 }

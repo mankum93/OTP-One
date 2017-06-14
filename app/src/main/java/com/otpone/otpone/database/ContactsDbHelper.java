@@ -343,7 +343,7 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
 
     }
 
-    public static Map<Contact, List<OTPMessage>> getAllContactsAndMessagesFromDatabase(SQLiteDatabase db, int sortOrder){
+    public static Map<Contact, List<OTPMessage>> getAllContactsAndMessagesFromDb(SQLiteDatabase db, int sortOrder){
         if(!db.isOpen()){
             throw new SQLiteDatabaseLockedException("Database not open for reading");
         }
@@ -449,7 +449,7 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
      * @param sortOrder : The order in which the entire(combined) message history should be sorted
      * @return : Mapping of every {@link OTPMessage} sent and its corresponding {@link Contact}
      */
-    public static Map<OTPMessage, Contact> getAllMessagesAndContactsFromDb(SQLiteDatabase db, int sortOrder){
+    public static List<Pair<OTPMessage, Contact>> getAllMessagesAndContactsFromDb(SQLiteDatabase db, int sortOrder){
         if(!db.isOpen()){
             throw new SQLiteDatabaseLockedException("Database not open for reading");
         }
@@ -471,7 +471,7 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
         }
 
         Map<String, Contact> contactsMap = new HashMap<>();
-        Map<OTPMessage, Contact> messagesAndContacts;
+        List<Pair<OTPMessage, Contact>> messagesAndContacts;
 
         Cursor c, cAddr;
         // Before running the query, check if the Tables exist
@@ -492,7 +492,7 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
                 + (sOrder != null ? (" ORDER BY " + MessagesRecordsTable.cols.MESSAGE_TIMESTAMP + " " + sOrder) : "")
                 , null);
 
-        messagesAndContacts = new LinkedHashMap<OTPMessage, Contact>(c.getCount());
+        messagesAndContacts = new LinkedList<>();
 
         if(!c .moveToFirst()){
             Log.e(TAG, "Both Contact and Messages tables have no data.");
@@ -579,7 +579,7 @@ public class ContactsDbHelper extends SQLiteOpenHelper{
                             new Timestamp(c.getLong(c.getColumnIndex(MessagesRecordsTable.cols.MESSAGE_TIMESTAMP))));
 
                     // Pair up this message with the contact
-                    messagesAndContacts.put(message, contact);
+                    messagesAndContacts.add(new Pair<OTPMessage, Contact>(message, contact));
                 }
 
             }while(c.moveToNext());
