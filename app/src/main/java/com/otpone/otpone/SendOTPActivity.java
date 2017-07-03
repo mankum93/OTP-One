@@ -1,7 +1,6 @@
 package com.otpone.otpone;
 
 import android.content.Context;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.support.v4.util.Pair;
@@ -18,7 +17,6 @@ import com.otpone.otpone.model.Contact;
 import com.otpone.otpone.model.OTPMessage;
 import com.otpone.otpone.model.Repository;
 import com.otpone.otpone.util.ListUtil;
-import com.otpone.otpone.util.MapUtil;
 import com.otpone.otpone.util.mocks.MockMessageSendingTask;
 import com.plivo.helper.api.client.RestAPI;
 import com.plivo.helper.api.response.message.MessageResponse;
@@ -27,17 +25,11 @@ import com.plivo.helper.exception.PlivoException;
 import org.greenrobot.eventbus.EventBus;
 
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.otpone.otpone.OTPOneApplication.PLIVO_AUTH_ID;
@@ -103,7 +95,7 @@ public class SendOTPActivity extends AppCompatActivity {
                         otpMessage.setMessageTimestamp(new Timestamp(System.currentTimeMillis()));
 
                         // Stash this message in the Db with the list of sent of message
-                        ContactsDbHelper.insertMessageToDatabase2(repo.db, otpMessage);
+                        ContactsDbHelper.insertMessageToDb(repo.db, otpMessage);
 
                         // Fill the Event Bus cache with this message with other sent messages.
                         // And then fire the sent message event through the Event Bus.
@@ -285,9 +277,9 @@ public class SendOTPActivity extends AppCompatActivity {
         }
     }
 
-    public interface MessageSendingListener<Response>{
-        void onMessageSent(Response response);
-        void onMessageSendFailed(Response response);
+    public interface MessageSendingListener<R>{
+        void onMessageSent(R response);
+        void onMessageSendFailed(R response);
     }
 
     // Message sent Event(for GreenRobot EventBus)--------------------------------------------------------------------------

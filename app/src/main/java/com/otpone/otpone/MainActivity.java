@@ -47,7 +47,7 @@ public class MainActivity extends AppCompatActivity {
         // Specify that tabs should be displayed in the action bar.
 
         // NOTE(regarding DEPRECATION): Google has now introduced a feature rich customizable,
-        // ToolBar augmenting(and deprecating some ActionBar API) the ActionBar
+        // ToolBar augmenting(and deprecating some ActionBar API) the ActionBar.
         // Cool thing is that, it is available in the support library.
         // I have decided not to use it because learning and getting familiar with
         // the API shall require some time.

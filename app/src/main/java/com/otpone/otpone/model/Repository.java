@@ -91,7 +91,7 @@ public class Repository {
         }
     }
 
-    public static Repository getRepository(Application context){
+    public static Repository getRepository(@NonNull Application context){
 
         if(repoInstance == null){
 

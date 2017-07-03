@@ -30,9 +30,7 @@ public class MessagesRecordFragment extends Fragment {
     private RecyclerView messagesRecordRecyclerView;
     private MessagesRecordListAdapter adapter;
 
-    private boolean noChange = false;
     private List<Pair<OTPMessage, Contact>> messagesAndContacts;
-    private static final String EXTRA_DISPLAY_STATUS = "EXTRA_DISPLAY_STATUS";
 
     private Repository repo;
 
@@ -46,12 +44,6 @@ public class MessagesRecordFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-
-        /*if(savedInstanceState != null){
-            // In this case, we just have to display the data that had been shown in the
-            // previous orientation. So, no need to load it afresh.
-            noChange = savedInstanceState.getBoolean(EXTRA_DISPLAY_STATUS);
-        }*/
 
         repo = Repository.getRepository();
         messagesAndContacts = repo.getMessagesAndContacts();
@@ -86,16 +78,18 @@ public class MessagesRecordFragment extends Fragment {
         if(repo == null){
             // Repo will only be null because of reference release.
             repo = Repository.getRepository();
-            messagesAndContacts = repo.getMessagesAndContacts();
-            adapter.refreshMessagesAndContacts(messagesAndContacts);
-            adapter.notifyDataSetChanged();
+            // If still the repo is null(it isn't supposed to be!),
+            // we don't invoke method on it.
+            if(repo != null){
+                messagesAndContacts = repo.getMessagesAndContacts();
+                adapter.refreshMessagesAndContacts(messagesAndContacts);
+                adapter.notifyDataSetChanged();
+            }
         }
     }
 
     @Override
     public void onSaveInstanceState(Bundle outState) {
-
-        //outState.putBoolean(EXTRA_DISPLAY_STATUS, noChange);
 
         super.onSaveInstanceState(outState);
     }

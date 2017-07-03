@@ -1,10 +1,7 @@
 package com.otpone.otpone;
 
-import android.content.Context;
 import android.content.res.AssetManager;
-import android.database.sqlite.SQLiteDatabase;
 import android.support.multidex.MultiDexApplication;
-import android.support.v4.util.Pair;
 import android.util.Log;
 
 import com.facebook.stetho.Stetho;
@@ -16,17 +13,13 @@ import com.otpone.otpone.model.OTPMessage;
 import com.otpone.otpone.model.Repository;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-
-import static com.otpone.otpone.database.ContactsDbHelper.DATABASE_NAME;
 
 /**
  * Created by DJ on 5/16/2017.
@@ -126,7 +119,7 @@ public class OTPOneApplication extends MultiDexApplication {
                 ContactsDbHelper.createMessageRecordsTable(repo.db);
 
                 // Insert the contacts into the table.
-                ContactsDbHelper.insertContactsToDatabase(repo.db, dummyContactsData);
+                ContactsDbHelper.insertContactsToDb(repo.db, dummyContactsData);
 
                 Log.d(TAG, "Dummy Contacts data inserted successfully to Db.");
 
